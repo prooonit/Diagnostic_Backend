@@ -25,24 +25,11 @@ diagnostic-booking-system/
 Prerequisites: Docker and Docker Compose.
 
 ```bash
+git clone https://github.com/prooonit/Diagnostic_Backend
 docker compose up --build
 ```
 
 This starts the Node.js/Express API and PostgreSQL. The API is at `http://localhost:3000`; PostgreSQL data persists in the `postgres_data` named volume.
-
-## Local development
-
-Create `.env` from `.env.example`, then run:
-
-```bash
-npm install
-docker compose up -d postgres
-npx prisma migrate dev
-npm run dev
-```
-
-The API container uses `postgres:5432`; the host accesses PostgreSQL through `localhost:5433`.
-
 ## Environment variables
 
 `.env.example` documents `PORT`, `DATABASE_URL`, `JWT_SECRET`, and `JWT_EXPIRES_IN`. Create `.env` for local application use and use a real JWT secret outside local development. Compose supplies the API container's internal database URL.
@@ -113,6 +100,8 @@ Important decisions: users can own multiple centers; booking stores `centerId` f
 ### Database Diagram
 
 The [Prisma schema](prisma/schema.prisma) is the source of truth for database relationships.
+<img width="1656" height="948" alt="Diagnostic DB Diagram" src="https://github.com/user-attachments/assets/e051705b-637d-4ea5-abc3-1d7f781b7cbd" />
+
 
 ## Appointment scheduling
 
@@ -165,5 +154,5 @@ The API connects to PostgreSQL at `postgres:5432`. PostgreSQL has a healthcheck,
 - Real payment gateway and appointment capacity management
 - Redis caching/rate limiting and background processing
 - Production logging, monitoring, deployment, and observability
-- Additional center roles (ADMIN, MANAGER, STAFF)
+- For Now there is only one role which is of Owner but we can extend to  Additional center roles (ADMIN, MANAGER, STAFF)
 - Automated integration tests
