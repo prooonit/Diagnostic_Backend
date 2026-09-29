@@ -1,5 +1,10 @@
 # Diagnostic Booking System
 
+## API documentation
+
+Interactive Swagger UI is available at `GET /docs` (for example, `http://localhost:3000/docs`).
+The OpenAPI 3.0.3 document is available at `GET /docs.json`.
+
 ## Assumptions
 
 ### Appointment scheduling
