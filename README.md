@@ -1,28 +1,169 @@
 # Diagnostic Booking System
 
+Backend service for authentication, diagnostic-center and test management, customer bookings, simulated payments, and payment webhooks. It is multi-tenant: a `DiagnosticCenter` is a tenant and `CenterMembership` controls center-specific access. A user can own multiple centers.
+
+## Tech stack
+
+Node.js, Express.js, PostgreSQL, Prisma ORM, JWT, bcrypt, Docker, Docker Compose, and Swagger/OpenAPI.
+
+## Project structure
+
+```text
+diagnostic-booking-system/
+├── src/ (config, controllers, docs, middleware, routes, services, utils, validators)
+├── prisma/ (migrations, schema.prisma)
+├── Dockerfile
+├── docker-compose.yml
+├── .dockerignore
+├── .env.example
+├── package.json
+└── README.md
+```
+
+## Run with Docker
+
+Prerequisites: Docker and Docker Compose.
+
+```bash
+docker compose up --build
+```
+
+This starts the Node.js/Express API and PostgreSQL. The API is at `http://localhost:3000`; PostgreSQL data persists in the `postgres_data` named volume.
+
+## Local development
+
+Create `.env` from `.env.example`, then run:
+
+```bash
+npm install
+docker compose up -d postgres
+npx prisma migrate dev
+npm run dev
+```
+
+The API container uses `postgres:5432`; the host accesses PostgreSQL through `localhost:5433`.
+
+## Environment variables
+
+`.env.example` documents `PORT`, `DATABASE_URL`, `JWT_SECRET`, and `JWT_EXPIRES_IN`. Create `.env` for local application use and use a real JWT secret outside local development. Compose supplies the API container's internal database URL.
+
 ## API documentation
 
-Interactive Swagger UI is available at `GET /docs` (for example, `http://localhost:3000/docs`).
-The OpenAPI 3.0.3 document is available at `GET /docs.json`.
+Swagger UI: `http://localhost:3000/docs`  
+OpenAPI JSON: `http://localhost:3000/docs.json`
 
-## Assumptions
+Swagger provides interactive documentation and JWT authorization for protected operations. Postman is also suitable for manual API verification.
 
-### Appointment scheduling
+## API endpoints
 
-Customers select an appointment date and time when creating a booking. The assignment does not define doctors/providers, provider schedules, test duration, machine/resource availability, or center capacity. Therefore, the current implementation does not model real-time slot availability. The system validates the appointment timestamp but does not perform capacity-based slot allocation. This can be extended later once those business rules are defined.
+### Authentication
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| POST | `/auth/register` | Register a new user |
+| POST | `/auth/login` | Login and receive a JWT |
+| GET | `/auth/me` | Get the authenticated user |
+
+### Diagnostic Centers
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| POST | `/centers` | Create a diagnostic center |
+| GET | `/centers` | List active centers with search and pagination |
+| GET | `/centers/:slug` | Get an active diagnostic center |
+| PATCH | `/centers/:slug` | Update a diagnostic center |
+| PATCH | `/centers/:slug/status` | Activate/deactivate a center |
+
+### Diagnostic Tests
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| POST | `/centers/:slug/tests` | Create a diagnostic test |
+| GET | `/centers/:slug/tests` | List active tests with search and pagination |
+| GET | `/centers/:slug/tests/:testId` | Get an active diagnostic test |
+| PATCH | `/centers/:slug/tests/:testId` | Update a diagnostic test |
+| PATCH | `/centers/:slug/tests/:testId/status` | Activate/deactivate a test |
+
+### Bookings
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| POST | `/bookings` | Create a booking |
+| GET | `/bookings` | List the authenticated user's bookings |
+| GET | `/bookings/:id` | Get an owned booking |
+| PATCH | `/bookings/:id/cancel` | Cancel a pending booking |
+
+### Payments
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| POST | `/payments` | Create a simulated payment |
+| POST | `/payments/webhook` | Process a payment webhook |
+
+## Authentication and authorization
+
+JWT bearer authentication protects user, management, booking, and payment endpoints. Roles are center-specific: `CenterMembership` stores the current `OWNER` role, not `User`. Owning one center grants no access to another. Customers can book active public tests without membership, but can access only their own bookings.
+
+## Database design
+
+`User` stores application users; `DiagnosticCenter` is a tenant; `CenterMembership` stores the user-to-center role; `DiagnosticTest` belongs to one center; `Booking` records a customer's test booking; `Payment` is the payment for that booking; and `WebhookEvent` stores webhook/idempotency data.
+
+Important decisions: users can own multiple centers; booking stores `centerId` for tenant isolation/history; booking amount snapshots the test price; `Payment.bookingId` is unique; `WebhookEvent.eventId` is unique; and centers/tests are deactivated rather than deleted.
+
+### Database Diagram
+
+The [Prisma schema](prisma/schema.prisma) is the source of truth for database relationships.
+
+## Appointment scheduling
+
+Customers select an appointment timestamp. The assignment does not define providers, schedules, test duration, machines/resources, or center capacity; the API validates the timestamp but does not allocate real-time slots. Availability management can be added once those rules are defined.
 
 ## Simulated payments
 
-`POST /payments` requires authentication and accepts a booking ID plus a simulated result (`SUCCESS` or `FAILED`). It creates a pending payment using the booking's stored amount, then simulates the provider callback through the same webhook-processing service used by `POST /payments/webhook`.
-
-The project does not integrate a real payment gateway. The payment API simulates the external provider and triggers the same webhook-processing logic that a real provider would call. Booking confirmation is performed by webhook processing rather than directly by the payment initiation endpoint.
-
-Payment and booking lifecycle:
+No real payment gateway is integrated. `POST /payments` accepts a booking ID and a simulated result. A booking starts `PENDING`; the payment uses the booking's stored amount, then webhook processing performs the final transition.
 
 ```text
 PENDING
-  |-- SUCCESS --> Payment SUCCESS, Booking CONFIRMED
-  |-- FAILED  --> Payment FAILED, Booking FAILED
+  +-- SUCCESS --> Payment SUCCESS, Booking CONFIRMED
+  +-- FAILED  --> Payment FAILED,  Booking FAILED
 ```
 
-Webhook callbacks use a unique `eventId` for idempotency. Re-delivering an already processed event returns a successful no-op response. A late event cannot transition a cancelled booking, or change a terminal successful/failed payment and booking to a conflicting state.
+Clients cannot choose payment amount. Payment and booking state changes are webhook-driven.
+
+## Webhook idempotency
+
+Each webhook has a unique `eventId`, backed by the `WebhookEvent.eventId` constraint. Repeated delivery is a safe no-op; it cannot duplicate records or corrupt state. Conflicting terminal transitions are rejected, and late webhooks cannot confirm cancelled bookings.
+
+## Important business rules
+
+- Booking amount is copied from diagnostic-test price.
+- Booking creation rejects client-controlled `amount`, `status`, `userId`, and `centerId`.
+- Booking access is scoped to the authenticated user.
+- Center/test management is scoped to membership in that center; cross-tenant access is prevented.
+- Historical bookings are preserved, and a booking has at most one payment.
+
+## Manual verification
+
+Verify manually in Swagger/Postman: authentication and invalid credentials, duplicate registration, missing/invalid JWTs, center/test authorization, cross-tenant access, search/pagination, invalid bookings, booking ownership/cancellation, payment success/failure and ownership, repeated/invalid/conflicting webhooks, late webhooks for cancelled bookings, Docker startup, and database persistence.
+
+## Error handling
+
+`400` validation or invalid state; `401` authentication failure; `403` forbidden center operation; `404` missing/inaccessible resource; `409` duplicate/conflicting operation; `500` unexpected server error.
+
+## Docker architecture
+
+```text
+Docker Compose
+├── API: Node.js + Express + Prisma (port 3000)
+└── PostgreSQL: separate service with named volume
+```
+
+The API connects to PostgreSQL at `postgres:5432`. PostgreSQL has a healthcheck, and Compose waits for it before starting the API.
+
+## Improvements with more time
+
+- Real payment gateway and appointment capacity management
+- Redis caching/rate limiting and background processing
+- Production logging, monitoring, deployment, and observability
+- Additional center roles (ADMIN, MANAGER, STAFF)
+- Automated integration tests
