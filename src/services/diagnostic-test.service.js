@@ -19,12 +19,28 @@ export function createDiagnosticTest(centerId, data) {
   });
 }
 
-export function listActiveDiagnosticTests(centerId) {
-  return prisma.diagnosticTest.findMany({
-    where: { centerId, isActive: true },
-    select: testSelect,
-    orderBy: { createdAt: "desc" },
-  });
+export async function listActiveDiagnosticTests(centerId, { search, skip, take }) {
+  const trimmedSearch = typeof search === "string" ? search.trim() : "";
+  const where = {
+    centerId,
+    isActive: true,
+    ...(trimmedSearch && {
+      name: { contains: trimmedSearch, mode: "insensitive" },
+    }),
+  };
+
+  const [tests, total] = await prisma.$transaction([
+    prisma.diagnosticTest.findMany({
+      where,
+      select: testSelect,
+      skip,
+      take,
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.diagnosticTest.count({ where }),
+  ]);
+
+  return { tests, total };
 }
 
 export async function getActiveDiagnosticTest(centerId, testId) {

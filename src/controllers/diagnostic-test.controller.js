@@ -10,6 +10,7 @@ import {
   validateTestStatus,
   validateTestUpdate,
 } from "../validators/diagnostic-test.validator.js";
+import { getPaginationMetadata, parsePagination } from "../utils/pagination.js";
 
 export async function create(req, res, next) {
   try {
@@ -22,8 +23,17 @@ export async function create(req, res, next) {
 
 export async function list(req, res, next) {
   try {
-    const tests = await listActiveDiagnosticTests(req.center.id);
-    return res.status(200).json({ tests });
+    const { page, limit, skip } = parsePagination(req.query);
+    const result = await listActiveDiagnosticTests(req.center.id, {
+      search: req.query.search,
+      skip,
+      take: limit,
+    });
+
+    return res.status(200).json({
+      data: result.tests,
+      pagination: getPaginationMetadata(page, limit, result.total),
+    });
   } catch (error) {
     return next(error);
   }

@@ -10,6 +10,7 @@ import {
   validateCenterStatus,
   validateCenterUpdate,
 } from "../validators/center.validator.js";
+import { getPaginationMetadata, parsePagination } from "../utils/pagination.js";
 
 export async function create(req, res, next) {
   try {
@@ -25,8 +26,18 @@ export async function create(req, res, next) {
 
 export async function list(req, res, next) {
   try {
-    const centers = await listActiveCenters();
-    return res.status(200).json({ centers });
+    const { page, limit, skip } = parsePagination(req.query);
+    const result = await listActiveCenters({
+      search: req.query.search,
+      location: req.query.location,
+      skip,
+      take: limit,
+    });
+
+    return res.status(200).json({
+      data: result.centers,
+      pagination: getPaginationMetadata(page, limit, result.total),
+    });
   } catch (error) {
     return next(error);
   }

@@ -44,12 +44,34 @@ export async function createCenter({ name, slug, location, userId }) {
   }
 }
 
-export function listActiveCenters() {
-  return prisma.diagnosticCenter.findMany({
-    where: { isActive: true },
-    select: publicCenterSelect,
-    orderBy: { createdAt: "desc" },
-  });
+function optionalContains(value) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? { contains: trimmed, mode: "insensitive" } : undefined;
+}
+
+export async function listActiveCenters({ search, location, skip, take }) {
+  const where = {
+    isActive: true,
+    name: optionalContains(search),
+    location: optionalContains(location),
+  };
+
+  const [centers, total] = await prisma.$transaction([
+    prisma.diagnosticCenter.findMany({
+      where,
+      select: publicCenterSelect,
+      skip,
+      take,
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.diagnosticCenter.count({ where }),
+  ]);
+
+  return { centers, total };
 }
 
 export async function getActiveCenterBySlug(slug) {
