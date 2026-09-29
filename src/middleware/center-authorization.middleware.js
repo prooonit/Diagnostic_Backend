@@ -1,6 +1,23 @@
 import prisma from "../config/database.js";
 import { AppError } from "../utils/app-error.js";
 
+export async function resolveActiveCenter(req, res, next) {
+  try {
+    const center = await prisma.diagnosticCenter.findFirst({
+      where: { slug: req.params.slug, isActive: true },
+    });
+
+    if (!center) {
+      throw new AppError(404, "Center not found");
+    }
+
+    req.center = center;
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export function requireCenterRole(roles) {
   const allowedRoles = Array.isArray(roles) ? roles : [roles];
 
