@@ -2,6 +2,10 @@
 
 Backend service for authentication, diagnostic-center and test management, customer bookings, simulated payments, and payment webhooks. It is multi-tenant: a `DiagnosticCenter` is a tenant and `CenterMembership` controls center-specific access. A user can own multiple centers.
 
+# Key Assumptions
+
+Diagnostic Center is treated as the tenant, with center-specific authorization through CenterMembership. A user can own multiple centers and can also book tests as a customer. Customers select appointment times, but real-time slot/capacity management is outside the assignment scope. Booking amount is a price snapshot from the selected test and cannot be client-controlled. Payments are simulated, with webhook processing responsible for final payment/booking state transitions and eventId-based idempotency. Centers/tests are deactivated rather than hard deleted to preserve historical data.
+
 ## Tech stack
 
 Node.js, Express.js, PostgreSQL, Prisma ORM, JWT, bcrypt, Docker, Docker Compose, and Swagger/OpenAPI.
