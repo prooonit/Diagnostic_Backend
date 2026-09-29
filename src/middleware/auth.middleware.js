@@ -10,6 +10,7 @@ const safeUserSelect = {
 
 export async function authenticate(req, res, next) {
   try {
+
     const authorization = req.get("authorization");
     const match = authorization?.match(/^Bearer\s+(.+)$/i);
     if (!match) {
